@@ -10,7 +10,7 @@ import time
 import logging
 
 
-ALERT = False
+ALERT = True
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def add_localstorage_values(driver, vals):
 def checkIsPage(driver, name, unexpectedAlertVal=None):
     try:
         return "display: none" not in driver.find_element(By.ID, name).get_attribute("style")
-    except TypeError:
+    except (TypeError, AttributeError):
         return checkIsPage(driver, name, unexpectedAlertVal)
     except UnexpectedAlertPresentException:
         return unexpectedAlertVal
@@ -87,6 +87,7 @@ if __name__ == "__main__":
     while cnt := cnt + 1:
         logger.debug(f"Attempt {cnt}")
 
+        waitPageLoading(driver)
         taskFound = False
 
         if checkIsPage(driver, "divTaskSelection"):
@@ -108,8 +109,13 @@ if __name__ == "__main__":
                 except TimeoutException:
                     pass
 
-            if alert is not None and 'ratio' in alert:
-                logger.debug("OUT OF REVIEWS")
+            if alert is not None and 'outstanding' not in alert:
+                if 'ratio' in alert:
+                    logger.debug("RATIO LIMIT")
+                elif 'access' in alert:
+                    logger.debug("TIME LIMIT")
+                else:
+                    logger.debug(alert)
                 print('\a')
                 break
 
@@ -122,3 +128,5 @@ if __name__ == "__main__":
         logger.debug("REVIEW CLAIMED")
         input('Press enter to wait new review: ')
         cnt = 0
+
+    driver.quit()
