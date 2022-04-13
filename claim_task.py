@@ -10,6 +10,8 @@ import time
 import logging
 
 
+ALERT = False
+
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -55,14 +57,18 @@ def handleAlert(driver):
 
 def waitPageLoading(driver):
     logger.debug("Waiting Loading...")
-    time.sleep(1)
+    time.sleep(0.5)
     alert = handleAlert(driver)
     while checkIsPage(driver, "divLoading", True) or checkIsPage(driver, "divSubmitting"):
-        time.sleep(0.3)
+        time.sleep(0.1)
         alert_ = handleAlert(driver)
         alert = alert if alert_ is None else alert_
     time.sleep(0.5)
     return alert
+
+
+def checkIsTask(driver):
+    return driver.find_elements(By.CLASS_NAME, "CodeMirror") != []
 
 
 if __name__ == "__main__":
@@ -73,36 +79,43 @@ if __name__ == "__main__":
         "v2tutorialseen42": "true"
     })
 
-    # driver.execute_script("window.alert_old = window.alert")
-    # driver.execute_script("window.alert = function() {}")
+    if not ALERT:
+        driver.execute_script("""window.alert_old = window.alert
+                                 window.alert = function() {}""")
 
     cnt = 0
     while cnt := cnt + 1:
         logger.debug(f"Attempt {cnt}")
 
+        taskFound = False
+
         if checkIsPage(driver, "divTaskSelection"):
             logger.debug("Selecting taskset")
             driver.execute_script("selectTaskset(42)")
             waitPageLoading(driver)
+            taskFound = checkIsTask(driver)
 
-        logger.debug("Claiming review")
-        driver.execute_script("claimReview(42)")
+        if not taskFound:
+            logger.debug("Claiming review")
+            driver.execute_script("claimReview(42)")
 
-        alert = waitPageLoading(driver)
-        if alert is None:
-            logger.debug("Waiting for alert")
-            try:
-                WebDriverWait(driver, 5).until(EC.alert_is_present())
-                alert = handleAlert(driver)
-            except TimeoutException:
-                pass
+            alert = waitPageLoading(driver)
+            if ALERT and alert is None:
+                logger.debug("Waiting for alert")
+                try:
+                    WebDriverWait(driver, 5).until(EC.alert_is_present())
+                    alert = handleAlert(driver)
+                except TimeoutException:
+                    pass
 
-        if alert is not None and 'ratio' in alert:
-            logger.debug("OUT OF REVIEWS")
-            print('\a')
-            break
+            if alert is not None and 'ratio' in alert:
+                logger.debug("OUT OF REVIEWS")
+                print('\a')
+                break
 
-        if driver.find_elements(By.CLASS_NAME, "CodeMirror") == []:
+            taskFound = checkIsTask(driver)
+
+        if not taskFound:
             continue
 
         print('\a')
