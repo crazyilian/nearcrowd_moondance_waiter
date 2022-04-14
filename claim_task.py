@@ -1,20 +1,20 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, UnexpectedAlertPresentException
+from selenium.common.exceptions import UnexpectedAlertPresentException
 from credentials import *
-
+import requests
+import json
+import datetime
+import sys
 import os
 import time
 import logging
 
 
-ALERT = True
-
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+requests.packages.urllib3.disable_warnings()
 
 
 def start_driver():
@@ -38,35 +38,74 @@ def add_localstorage_values(driver, vals):
     driver.get("https://nearcrowd.com/v2")
 
 
-def checkIsPage(driver, name, alertDict={}):
-    try:
-        return "display: none" not in driver.find_element(By.ID, name).get_attribute("style")
-    except (TypeError, AttributeError):
-        return checkIsPage(driver, name, alertDict)
-    except UnexpectedAlertPresentException as e:
-        alertDict['text'] = e.alert_text
-        return checkIsPage(driver, name, alertDict)
-
-
-def handleAlert(driver, alertDict):
-    if (EC.alert_is_present()(driver)):
-        alert = driver.switch_to.alert
-        alertDict['text'] = alert.text
-        alert.accept()
-
-
-def waitPageLoading(driver, alertDict={}):
+def waitPageLoading(driver):
     logger.debug("Waiting Loading...")
     time.sleep(0.5)
-    handleAlert(driver, alertDict)
-    while checkIsPage(driver, "divLoading", alertDict) or checkIsPage(driver, "divSubmitting", alertDict):
-        time.sleep(0.1)
-        handleAlert(driver, alertDict)
+    while "display: none" not in driver.find_element(By.ID, "divLoading").get_attribute("style"):
+        time.sleep(0.3)
     time.sleep(0.5)
 
 
-def checkIsTask(driver):
-    return driver.find_elements(By.CLASS_NAME, "CodeMirror") != []
+def string2time(tm):
+    hh, mm, ss = map(int, tm.split(':'))
+    sec = hh * 60 * 60 + mm * 60 + ss
+    dt = datetime.datetime.now() + datetime.timedelta(seconds=sec)
+    return dt
+
+
+def translateTime(dic, key):
+    if key in dic:
+        dic[key] = string2time(dic[key])
+
+
+def getHash(driver):
+    hsh = driver.execute_script("""
+        return await window.contract.account.signTransaction('app.nearcrowd.near', [nearApi.transactions.functionCall('v2', {}, 0, 0)]).then(arr => {
+            let encodedTx = btoa(String.fromCharCode.apply(null, arr[1].encode()));
+            return encodeURIComponent(encodedTx);
+        }).catch(errorOut);
+    """)
+    return hsh
+
+
+def prettifyStatus(status):
+    logger.debug(f"Prettifying {str(status)}")
+    try:
+        status = json.loads(status)
+        translateTime(status, 'can_claim_task_in')
+        translateTime(status, 'can_claim_review_in')
+        translateTime(status, 'time_left')
+    except ValueError:
+        pass
+    return status
+
+
+def getPageResponse(driver, page):
+    hsh = getHash(driver)
+    url = f"https://nearcrowd.com/v2/{page}/{hsh}"
+    resp = requests.get(url, verify=False)
+    return resp
+
+
+def getStatus(driver):
+    logger.debug("Getting status")
+    res = getPageResponse(driver, 'taskset/42').text
+    status = prettifyStatus(res)
+    return status
+
+
+def claimReview(driver):
+    logger.debug("Claiming review")
+    res = getPageResponse(driver, 'claim_review/42').text
+    return res
+
+
+def hasWork(status):
+    return status.get('status') in ('has_review', 'has_task')
+
+
+def goToTaskPage(driver):
+    driver.execute_script('selectTaskset(42)')
 
 
 if __name__ == "__main__":
@@ -77,56 +116,60 @@ if __name__ == "__main__":
         "v2tutorialseen42": "true"
     })
 
-    if not ALERT:
-        driver.execute_script("""window.alert_old = window.alert
-                                 window.alert = function() {}""")
+    # driver.execute_script("""window.alert_old = window.alert
+    #                          window.alert = function() {}""")
 
-    cnt = 0
-    while cnt := cnt + 1:
-        logger.debug(f"Attempt {cnt}")
+    waitPageLoading(driver)
+    goToTaskPage(driver)
+    while True:
+        try:
+            status = getStatus(driver)
+            cnt = 0
+            while not hasWork(status):
+                cnt += 1
+                logger.debug(f"Attempt {cnt}")
+                res = claimReview(driver)
 
-        waitPageLoading(driver)
-        taskFound = False
-
-        if checkIsPage(driver, "divTaskSelection"):
-            logger.debug("Selecting taskset")
-            driver.execute_script("selectTaskset(42)")
-            waitPageLoading(driver)
-            taskFound = checkIsTask(driver)
-
-        if not taskFound:
-            logger.debug("Claiming review")
-            driver.execute_script("claimReview(42)")
-
-            alertDict = {}
-            waitPageLoading(driver, alertDict)
-            if ALERT and 'text' not in alertDict:
-                logger.debug("Waiting for alert")
-                try:
-                    WebDriverWait(driver, 3).until(EC.alert_is_present())
-                    handleAlert(driver, alertDict)
-                except TimeoutException:
-                    pass
-
-            alert = alertDict.get('text')
-            if alert is not None and 'outstanding' not in alert:
-                if 'ratio' in alert:
+                if res == 'no_reviews':
+                    logger.debug("Unsuccessful")
+                elif 'user_task_id' in res:
+                    logger.debug("Review claimed")
+                    status = prettifyStatus(res)
+                    status['status'] = 'has_review'
+                elif res == 'need_more_tasks':
+                    print('\a')
                     logger.debug("RATIO LIMIT")
-                elif 'access' in alert:
+                    sys.exit(0)
+                elif res == 'no_access':
+                    print('\a')
                     logger.debug("TIME LIMIT")
+                    goToTaskPage(driver)
+                    status = getStatus(driver)
+                    endtime = status['can_claim_review_in']
+                    waitsec = (endtime - datetime.datetime.now()).seconds
+                    waitsec = max(0, waitsec)
+                    logger.debug(f"Wait until {endtime.strftime('%H:%M:%S')} ({waitsec} seconds)")
+                    time.sleep(waitsec)
                 else:
-                    logger.debug(alert)
-                print('\a')
-                break
+                    print('\a')
+                    logger.debug('UNKNOWN CLAIM REVIEW STATUS:')
+                    logger.debug(res)
 
-            taskFound = checkIsTask(driver)
+            print('\a')
+            goToTaskPage(driver)
 
-        if not taskFound:
-            continue
-
-        print('\a')
-        logger.debug("REVIEW CLAIMED")
-        input('Press enter to wait new review: ')
-        cnt = 0
-
-    driver.quit()
+            if status['status'] == 'has_review':
+                logger.debug("REVIEW IS ACTIVE")
+            else:
+                logger.debug('TASK IS ACTIVE')
+            input('Press enter to wait new review: ')
+        except UnexpectedAlertPresentException as e:
+            logger.debug(f'Unexpected Alert: {e.alert_text}')
+            logger.debug('Proceeding...')
+        except Exception as e:
+            print('\a')
+            logger.debug('UNKNOWN EXCEPTION IN SCRIPT')
+            logger.exception(e)
+            logger.debug('Waiting 5 sec')
+            time.sleep(5)
+            logger.debug('Proceeding...')
