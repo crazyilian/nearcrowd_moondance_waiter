@@ -38,33 +38,31 @@ def add_localstorage_values(driver, vals):
     driver.get("https://nearcrowd.com/v2")
 
 
-def checkIsPage(driver, name, unexpectedAlertVal=None):
+def checkIsPage(driver, name, alertDict={}):
     try:
         return "display: none" not in driver.find_element(By.ID, name).get_attribute("style")
     except (TypeError, AttributeError):
-        return checkIsPage(driver, name, unexpectedAlertVal)
-    except UnexpectedAlertPresentException:
-        return unexpectedAlertVal
+        return checkIsPage(driver, name, alertDict)
+    except UnexpectedAlertPresentException as e:
+        alertDict['text'] = e.alert_text
+        return checkIsPage(driver, name, alertDict)
 
 
-def handleAlert(driver):
+def handleAlert(driver, alertDict):
     if (EC.alert_is_present()(driver)):
         alert = driver.switch_to.alert
-        text = alert.text
+        alertDict['text'] = alert.text
         alert.accept()
-        return text
 
 
-def waitPageLoading(driver):
+def waitPageLoading(driver, alertDict={}):
     logger.debug("Waiting Loading...")
     time.sleep(0.5)
-    alert = handleAlert(driver)
-    while checkIsPage(driver, "divLoading", True) or checkIsPage(driver, "divSubmitting"):
+    handleAlert(driver, alertDict)
+    while checkIsPage(driver, "divLoading", alertDict) or checkIsPage(driver, "divSubmitting", alertDict):
         time.sleep(0.1)
-        alert_ = handleAlert(driver)
-        alert = alert if alert_ is None else alert_
+        handleAlert(driver, alertDict)
     time.sleep(0.5)
-    return alert
 
 
 def checkIsTask(driver):
@@ -100,15 +98,17 @@ if __name__ == "__main__":
             logger.debug("Claiming review")
             driver.execute_script("claimReview(42)")
 
-            alert = waitPageLoading(driver)
-            if ALERT and alert is None:
+            alertDict = {}
+            waitPageLoading(driver, alertDict)
+            if ALERT and 'text' not in alertDict:
                 logger.debug("Waiting for alert")
                 try:
-                    WebDriverWait(driver, 5).until(EC.alert_is_present())
-                    alert = handleAlert(driver)
+                    WebDriverWait(driver, 3).until(EC.alert_is_present())
+                    handleAlert(driver, alertDict)
                 except TimeoutException:
                     pass
 
+            alert = alertDict.get('text')
             if alert is not None and 'outstanding' not in alert:
                 if 'ratio' in alert:
                     logger.debug("RATIO LIMIT")
