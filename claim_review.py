@@ -121,10 +121,10 @@ if __name__ == "__main__":
 
     waitPageLoading(driver)
     goToTaskPage(driver)
+    cnt = 0
     while True:
         try:
             status = getStatus(driver)
-            cnt = 0
             while not hasWork(status):
                 cnt += 1
                 logger.debug(f"Attempt {cnt}")
@@ -163,6 +163,7 @@ if __name__ == "__main__":
             else:
                 logger.debug('TASK IS ACTIVE')
             input('Press enter to wait new review: ')
+            cnt = 0
         except UnexpectedAlertPresentException as e:
             logger.debug(f'Unexpected Alert: {e.alert_text}')
             logger.debug('Proceeding...')
