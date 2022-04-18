@@ -43,13 +43,21 @@ def add_localstorage_values(driver, vals):
     driver.get("https://nearcrowd.com/v2")
 
 
-def waitPageLoading(driver):
-    logger.debug("Waiting Loading...")
+def waitPage(driver, div):
+    logger.debug(f"Waiting {div.removeprefix('div')}...")
     time.sleep(0.5)
-    while "display: none" not in driver.find_element(By.ID, "divLoading").get_attribute("style"):
+    while "display: none" not in driver.find_element(By.ID, div).get_attribute("style"):
         time.sleep(0.3)
     time.sleep(0.5)
     set_title(driver)
+
+
+def waitPageLoading(driver):
+    waitPage(driver, "divLoading")
+
+
+def waitPageSubmitting(driver):
+    waitPage(driver, "divSubmitting")
 
 
 def string2time(tm):
@@ -172,6 +180,7 @@ if __name__ == "__main__":
             else:
                 logger.debug('TASK IS ACTIVE')
             input('Press enter to wait new review: ')
+            waitPageSubmitting(driver)
             cnt = 0
         except UnexpectedAlertPresentException as e:
             logger.debug(f'Unexpected Alert: {e.alert_text}')
