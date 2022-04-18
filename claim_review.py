@@ -148,7 +148,7 @@ if __name__ == "__main__":
                     endtime = status['can_claim_review_in']
                     waitsec = (endtime - datetime.datetime.now()).seconds
                     waitsec = max(0, waitsec)
-                    logger.debug(f"Wait until {endtime.strftime('%H:%M:%S')} ({waitsec} seconds)")
+                    logger.debug(f"Wait until {endtime.strftime('%H:%M:%S')} ({waitsec // 60} minutes)")
                     time.sleep(waitsec)
                 else:
                     print('\a')
