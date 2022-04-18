@@ -12,9 +12,13 @@ import logging
 
 
 logging.basicConfig()
-logger = logging.getLogger(' ' + ACCOUNT_NAME[:-len('.crowdforces.near')] + ' ')
+logger = logging.getLogger(' ' + ACCOUNT_NAME.removesuffix(".near").removesuffix(".crowdforces") + ' ')
 logger.setLevel(logging.DEBUG)
 requests.packages.urllib3.disable_warnings()
+
+
+def set_title(driver):
+    driver.execute_script(f"document.title = '{ACCOUNT_NAME}'")
 
 
 def start_driver():
@@ -27,6 +31,7 @@ def start_driver():
     driver = webdriver.Chrome(executable_path=f'{os.getcwd()}/chromedriver', options=chrome_options)
     logger.debug("Going to nearcrowd.com")
     driver.get("https://nearcrowd.com")
+    set_title(driver)
     return driver
 
 
@@ -44,6 +49,7 @@ def waitPageLoading(driver):
     while "display: none" not in driver.find_element(By.ID, "divLoading").get_attribute("style"):
         time.sleep(0.3)
     time.sleep(0.5)
+    set_title(driver)
 
 
 def string2time(tm):
@@ -91,12 +97,14 @@ def getStatus(driver):
     logger.debug("Getting status")
     res = getPageResponse(driver, 'taskset/42').text
     status = prettifyStatus(res)
+    set_title(driver)
     return status
 
 
 def claimReview(driver):
     logger.debug("Claiming review")
     res = getPageResponse(driver, 'claim_review/42').text
+    set_title(driver)
     return res
 
 
@@ -106,6 +114,7 @@ def hasWork(status):
 
 def goToTaskPage(driver):
     driver.execute_script('selectTaskset(42)')
+    set_title(driver)
 
 
 if __name__ == "__main__":
