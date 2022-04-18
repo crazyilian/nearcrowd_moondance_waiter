@@ -12,7 +12,7 @@ import logging
 
 
 logging.basicConfig()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(' ' + ACCOUNT_NAME[:-len('.crowdforces.near')] + ' ')
 logger.setLevel(logging.DEBUG)
 requests.packages.urllib3.disable_warnings()
 
