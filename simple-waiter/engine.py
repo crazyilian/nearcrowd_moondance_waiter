@@ -1,4 +1,3 @@
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import UnexpectedAlertPresentException
 from credentials import *
@@ -6,33 +5,19 @@ import requests
 import json
 import datetime
 import sys
-import os
 import time
 import logging
 
 
-logging.basicConfig()
-logger = logging.getLogger(' ' + ACCOUNT_NAME.removesuffix(".near").removesuffix(".crowdforces") + ' ')
+logging.basicConfig(format="%(asctime)s | %(name)s | %(message)s", datefmt="%H:%M:%S")
+logger = logging.getLogger(ACCOUNT_NAME.removesuffix(".near").removesuffix(".crowdforces"))
 logger.setLevel(logging.DEBUG)
 requests.packages.urllib3.disable_warnings()
+request_session = None
 
 
 def set_title(driver):
     driver.execute_script(f"document.title = '{ACCOUNT_NAME}'")
-
-
-def start_driver():
-    logger.debug("Starting driver")
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
-    # chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--no-sandbox")
-    driver = webdriver.Chrome(executable_path=f'{os.getcwd()}/chromedriver', options=chrome_options)
-    logger.debug("Going to nearcrowd.com")
-    driver.get("https://nearcrowd.com")
-    set_title(driver)
-    return driver
 
 
 def add_localstorage_values(driver, vals):
@@ -97,7 +82,7 @@ def prettifyStatus(status):
 def getPageResponse(driver, page):
     hsh = getHash(driver)
     url = f"https://nearcrowd.com/v2/{page}/{hsh}"
-    resp = requests.get(url, verify=False)
+    resp = requests_session.get(url, verify=False)
     return resp
 
 
@@ -125,14 +110,15 @@ def goToTaskPage(driver):
     set_title(driver)
 
 
-if __name__ == "__main__":
-    driver = start_driver()
+def main(driver, requests_session_):
+    global requests_session
+    requests_session = requests_session_
+
     add_localstorage_values(driver, {
         "undefined_wallet_auth_key": f'{{"accountId":"{ACCOUNT_NAME}"}}',
         f"near-api-js:keystore:{ACCOUNT_NAME}:mainnet": PRIVATE_KEY,
         "v2tutorialseen42": "true"
     })
-
     # driver.execute_script("""window.alert_old = window.alert
     #                          window.alert = function() {}""")
 
@@ -143,6 +129,7 @@ if __name__ == "__main__":
         try:
             status = getStatus(driver)
             while not hasWork(status):
+                time.sleep(5)
                 cnt += 1
                 logger.debug(f"Attempt {cnt}")
                 res = claimReview(driver)
