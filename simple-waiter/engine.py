@@ -13,7 +13,6 @@ logging.basicConfig(format="%(asctime)s | %(name)s | %(message)s", datefmt="%H:%
 logger = logging.getLogger(ACCOUNT_NAME.removesuffix(".near").removesuffix(".crowdforces"))
 logger.setLevel(logging.DEBUG)
 requests.packages.urllib3.disable_warnings()
-request_session = None
 
 
 def set_title(driver):
@@ -79,24 +78,24 @@ def prettifyStatus(status):
     return status
 
 
-def getPageResponse(driver, page):
+def getPageResponse(driver, reqsession, page):
     hsh = getHash(driver)
     url = f"https://nearcrowd.com/v2/{page}/{hsh}"
-    resp = requests_session.get(url, verify=False)
+    resp = reqsession.get(url, verify=False)
     return resp
 
 
-def getStatus(driver):
+def getStatus(driver, reqsession):
     logger.debug("Getting status")
-    res = getPageResponse(driver, 'taskset/42').text
+    res = getPageResponse(driver, reqsession, 'taskset/42').text
     status = prettifyStatus(res)
     set_title(driver)
     return status
 
 
-def claimReview(driver):
+def claimReview(driver, reqsession):
     logger.debug("Claiming review")
-    res = getPageResponse(driver, 'claim_review/42').text
+    res = getPageResponse(driver, reqsession, 'claim_review/42').text
     set_title(driver)
     return res
 
@@ -110,9 +109,7 @@ def goToTaskPage(driver):
     set_title(driver)
 
 
-def main(driver, requests_session_):
-    global requests_session
-    requests_session = requests_session_
+def main(driver, reqsession):
 
     add_localstorage_values(driver, {
         "undefined_wallet_auth_key": f'{{"accountId":"{ACCOUNT_NAME}"}}',
@@ -127,12 +124,12 @@ def main(driver, requests_session_):
     cnt = 0
     while True:
         try:
-            status = getStatus(driver)
+            status = getStatus(driver, reqsession)
             while not hasWork(status):
                 time.sleep(5)
                 cnt += 1
                 logger.debug(f"Attempt {cnt}")
-                res = claimReview(driver)
+                res = claimReview(driver, reqsession)
 
                 if res == 'no_reviews':
                     logger.debug("Unsuccessful")
@@ -148,7 +145,7 @@ def main(driver, requests_session_):
                     print('\a')
                     logger.debug("TIME LIMIT")
                     goToTaskPage(driver)
-                    status = getStatus(driver)
+                    status = getStatus(driver, reqsession)
                     endtime = status['can_claim_review_in']
                     waitsec = (endtime - datetime.datetime.now()).seconds
                     waitsec = max(0, waitsec)
