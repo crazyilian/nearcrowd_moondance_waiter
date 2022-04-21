@@ -109,13 +109,17 @@ def goToTaskPage(driver):
     set_title(driver)
 
 
-def main(driver, reqsession):
-
+def login(driver):
     add_localstorage_values(driver, {
         "undefined_wallet_auth_key": f'{{"accountId":"{ACCOUNT_NAME}"}}',
         f"near-api-js:keystore:{ACCOUNT_NAME}:mainnet": PRIVATE_KEY,
         "v2tutorialseen42": "true"
     })
+
+
+def main(driver, reqsession):
+    login(driver)
+
     # driver.execute_script("""window.alert_old = window.alert
     #                          window.alert = function() {}""")
 
