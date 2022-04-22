@@ -16,7 +16,12 @@ requests.packages.urllib3.disable_warnings()
 
 
 def set_title(driver):
+    if  len(driver.window_handles) != 1:
+        return
+    original_window = driver.current_window_handle
+    driver.switch_to.new_window('tab')
     driver.execute_script(f"document.title = '{ACCOUNT_NAME}'")
+    driver.switch_to.window(original_window)
 
 
 def add_localstorage_values(driver, vals):
